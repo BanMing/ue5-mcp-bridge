@@ -4,10 +4,10 @@
  * UE5 MCP Server
  *
  * Bridges MCP-compatible AI clients to Unreal Engine 5's editor via HTTP REST API.
- * The UnrealClaude plugin runs an HTTP server (default port 3000) with editor manipulation tools.
+ * The UnrealClaude plugin runs an HTTP server (default port 8765) with editor manipulation tools.
  *
  * Environment Variables:
- *   UNREAL_MCP_URL - Base URL for Unreal MCP server (default: http://localhost:3000)
+ *   UNREAL_MCP_URL - Base URL for Unreal MCP server (default: http://localhost:8765)
  *   MCP_REQUEST_TIMEOUT_MS - HTTP request timeout in milliseconds (default: 30000)
  *   INJECT_CONTEXT - Enable automatic context injection on tool calls (default: false)
  *   MCP_TOOL_CACHE_TTL_MS - TTL for tool list cache in milliseconds (default: 30000)
@@ -51,7 +51,7 @@ import {
 
 // Configuration with defaults
 const CONFIG = {
-  unrealMcpUrl: process.env.UNREAL_MCP_URL || "http://localhost:3000",
+  unrealMcpUrl: process.env.UNREAL_MCP_URL || "http://localhost:8765",
   requestTimeoutMs: parseInt(process.env.MCP_REQUEST_TIMEOUT_MS, 10) || 30000,
   injectContext: process.env.INJECT_CONTEXT === "true",
   asyncEnabled: process.env.MCP_ASYNC_ENABLED !== "false",

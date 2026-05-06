@@ -47,7 +47,7 @@ The goal is to speed up the tedious parts of game development so you can focus o
 ## Requirements
 
 - **Node.js** 18.0.0 or higher
-- An HTTP endpoint that implements the expected REST API (default: `http://localhost:3000`)
+- An HTTP endpoint that implements the expected REST API (default: `http://localhost:8765`)
 
 > **Note**: This MCP server is designed to work with the [UnrealClaude plugin](https://github.com/Natfii/UnrealClaude), but can be adapted for other HTTP backends that implement the same API.
 
@@ -73,7 +73,7 @@ Add to your MCP client's configuration:
       "command": "node",
       "args": ["/path/to/unrealclaude-mcp-bridge/index.js"],
       "env": {
-        "UNREAL_MCP_URL": "http://localhost:3000"
+        "UNREAL_MCP_URL": "http://localhost:8765"
       }
     }
   }
@@ -88,7 +88,7 @@ Add to your MCP client's configuration:
       "command": "node",
       "args": ["/path/to/unrealclaude-mcp-bridge/index.js"],
       "env": {
-        "UNREAL_MCP_URL": "http://localhost:3000"
+        "UNREAL_MCP_URL": "http://localhost:8765"
       }
     }
   }
@@ -307,7 +307,7 @@ Enable automatic context injection by setting:
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `UNREAL_MCP_URL` | `http://localhost:3000` | Unreal plugin HTTP server URL |
+| `UNREAL_MCP_URL` | `http://localhost:8765` | Unreal plugin HTTP server URL |
 | `MCP_REQUEST_TIMEOUT_MS` | `30000` | Request timeout in milliseconds |
 | `INJECT_CONTEXT` | `false` | Auto-inject UE5 context on tool responses |
 | `DEBUG` | - | Enable debug logging |

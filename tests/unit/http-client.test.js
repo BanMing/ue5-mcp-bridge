@@ -17,7 +17,7 @@ import {
   TOOL_EXECUTE_FAILURE,
 } from "../helpers/fixtures.js";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = "http://localhost:8765";
 const TIMEOUT_MS = 5000;
 
 beforeEach(() => {

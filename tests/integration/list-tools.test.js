@@ -31,7 +31,7 @@ vi.mock("fs", () => ({
 
 import { listCategories } from "../../context-loader.js";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = "http://localhost:8765";
 const TIMEOUT_MS = 5000;
 const DEFAULT_TTL_MS = 30000;
 

@@ -57,7 +57,7 @@ import {
   clearCache,
 } from "../../context-loader.js";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = "http://localhost:8765";
 const TIMEOUT_MS = 5000;
 
 // Simulated tool cache (mirrors toolCache in index.js)
