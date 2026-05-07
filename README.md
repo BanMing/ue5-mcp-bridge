@@ -328,6 +328,61 @@ Enable automatic context injection by setting:
 - Run `npm install` to ensure dependencies are present
 - Verify the path in your MCP client config points to the correct `index.js`
 
+### Calling tools with non-ASCII (Chinese / CJK / accented) text
+
+**Problem.** On Windows, `curl -d '{"Text":"中文"}'` (or any shell that pipes
+through `cmd.exe`) silently transcodes the JSON body from UTF-8 to the local
+ANSI codepage (GBK on zh-CN Windows, CP1252 on en-US, etc.) **before** sending.
+The Unreal HTTP server then reads the bytes as UTF-8, fails decoding, and stores
+literal `?` characters in `FString` — so widgets render `?????` even though the
+tool reports success and returns 0 errors.
+
+This is **not** a font-fallback issue. UE 5.7's default Roboto is composite with
+DroidSansFallback and renders CJK glyphs correctly when the underlying string is
+valid UTF-8. The bytes are corrupted in transit, not at render time.
+
+**Symptom.** Round-trip read of the property returns `?` characters, and
+captured viewport screenshots show `?????` where Chinese / CJK text should be.
+
+**Fix.** Use an HTTP client that doesn't pass arguments through `cmd.exe`. The
+Node.js bridge itself is UTF-8 safe — this only bites callers that hand-craft
+direct `POST /mcp/tool/<name>` requests over `curl` from Git Bash / PowerShell
+on Windows.
+
+Python `urllib.request` works reliably:
+
+```python
+import json, urllib.request
+
+URL = 'http://localhost:8765/mcp/tool/umg_modify'
+payload = {
+    'operation': 'set_widget_properties',
+    'widget_blueprint_path': '/Game/UI/WBP_PaogeCombatHUD',
+    'widget_name': 'Z3_PlayerName',
+    'properties': {'Text': '袍哥'},  # UTF-8 source text
+}
+body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+req = urllib.request.Request(
+    URL,
+    data=body,
+    headers={'Content-Type': 'application/json; charset=utf-8'},
+)
+with urllib.request.urlopen(req, timeout=15) as r:
+    print(json.loads(r.read().decode('utf-8')))
+```
+
+The two load-bearing details are `ensure_ascii=False` (so `json.dumps` emits the
+literal CJK codepoints, not `\uXXXX` escapes — both are valid JSON, but the
+former matches what UE's reflection layer expects in `FText` payloads), and
+`.encode('utf-8')` (so the body bytes match the declared `charset=utf-8`).
+
+If you must use `curl`, write the body to a file first (`-d @body.json`) — the
+file path is ASCII so `cmd.exe` won't transcode the file contents, only the
+filename argument.
+
+Discovered 2026-05-07 while building `WBP_PaogeCombatHUD` via the Story 1+3 MCP
+tools. Any direct callers of the HTTP surface should follow the same rule.
+
 ### Running the Test Suite
 
 This repo includes a Vitest test suite (87 tests) that validates bridge behavior without a running Unreal Editor:
