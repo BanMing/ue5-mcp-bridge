@@ -54,7 +54,24 @@ describe("resolveUnrealTool", () => {
     expect(resolveUnrealTool("anim", "add_state")).toBe("anim_blueprint_modify");
     expect(resolveUnrealTool("enhanced_input", "create_action")).toBe("enhanced_input");
     expect(resolveUnrealTool("material", "create_material_instance")).toBe("material");
-    expect(resolveUnrealTool("asset", "duplicate")).toBe("asset");
+    expect(resolveUnrealTool("asset", "set_asset_property")).toBe("asset");
+  });
+
+  it("routes asset domain to 'asset_manage' for CRUD ops (delete/move/duplicate/etc.)", () => {
+    const manageOps = [
+      "search", "find", "list_folder", "open_in_editor",
+      "save_all_dirty", "duplicate", "move", "delete",
+    ];
+    for (const op of manageOps) {
+      expect(resolveUnrealTool("asset", op)).toBe("asset_manage");
+    }
+  });
+
+  it("routes asset domain to 'asset' for property/query ops", () => {
+    const propertyOps = ["set_asset_property", "save_asset", "get_asset_info", "list_assets"];
+    for (const op of propertyOps) {
+      expect(resolveUnrealTool("asset", op)).toBe("asset");
+    }
   });
 
   it("routes blueprint domain to 'blueprint_query' for read ops", () => {
@@ -213,6 +230,7 @@ describe("categorizeToolForStatus", () => {
     expect(categorizeToolForStatus("enhanced_input")).toBe("enhanced_input");
     expect(categorizeToolForStatus("material")).toBe("material");
     expect(categorizeToolForStatus("asset")).toBe("asset");
+    expect(categorizeToolForStatus("asset_manage")).toBe("asset");
   });
 
   it("categorizes task queue tools", () => {

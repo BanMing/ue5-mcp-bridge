@@ -25,3 +25,6 @@ Thumbs.db
 
 # Package lock (optional - regenerated on install)
 # package-lock.json
+
+# Local session / audit logs (per-machine, never share)
+production/

@@ -70,6 +70,22 @@ const CHARACTER_DATA_OPS = new Set([
   "assign_data_asset",
 ]);
 
+// Asset operations that route to "asset_manage" instead of "asset".
+// FMCPTool_Asset (slim tool) only exposes set_asset_property/save_asset/
+// get_asset_info/list_assets. Everything else — CRUD, search, delete with
+// referencer guard — lives in FMCPTool_AssetManage and must be reached
+// through the JS router since the schema advertises a unified "asset" domain.
+const ASSET_MANAGE_OPS = new Set([
+  "search",
+  "find",
+  "list_folder",
+  "open_in_editor",
+  "save_all_dirty",
+  "duplicate",
+  "move",
+  "delete",
+]);
+
 /**
  * Resolve a router call to the underlying Unreal tool name.
  * @param {string} domain - e.g. "blueprint", "anim", "character"
@@ -83,6 +99,9 @@ export function resolveUnrealTool(domain, operation) {
   }
   if (domain === "blueprint" && BLUEPRINT_QUERY_OPS.has(operation)) {
     return "blueprint_query";
+  }
+  if (domain === "asset" && ASSET_MANAGE_OPS.has(operation)) {
+    return "asset_manage";
   }
   return DOMAIN_TOOL_MAP[domain] ?? null;
 }
@@ -103,6 +122,7 @@ const TOOL_TO_DOMAIN = Object.fromEntries(
   Object.entries(DOMAIN_TOOL_MAP).map(([domain, tool]) => [tool, domain])
 );
 TOOL_TO_DOMAIN["character_data"] = "character"; // sub-route
+TOOL_TO_DOMAIN["asset_manage"] = "asset";       // sub-route for CRUD ops
 
 /**
  * Categorize a tool for the unreal_status health check.
@@ -165,9 +185,12 @@ export const ROUTER_TOOL_SCHEMA = {
     "  ops: create_material_instance, set_material_parameters,",
     "  set_skeletal_mesh_material, set_actor_material, get_material_info",
     "",
-    'domain:"asset" (key params: asset_path, or asset_name+package_path for create)',
-    "  ops: create_blueprint, duplicate, rename, delete, move,",
-    "  list_assets, get_asset_info, reimport",
+    'domain:"asset" (key params: asset_path / source_path+dest_path / folder_path)',
+    "  property ops (FMCPTool_Asset): set_asset_property, save_asset,",
+    "  get_asset_info, list_assets",
+    "  CRUD ops (FMCPTool_AssetManage): search, find, list_folder,",
+    "  open_in_editor, save_all_dirty, duplicate, move, delete",
+    "  delete requires confirm_delete:true; blocked by referencers unless force:true.",
     "",
     "Pass all domain-specific params inside the params object.",
   ].join("\n"),
