@@ -11,11 +11,12 @@ import {
 } from "../../tool-router.js";
 
 describe("classifyTool", () => {
-  it("classifies all 12 simple tools", () => {
+  it("classifies all 13 simple tools", () => {
     const expected = [
       "spawn_actor", "move_actor", "delete_actors", "set_property",
       "get_level_actors", "open_level", "asset_search", "asset_dependencies",
-      "asset_referencers", "capture_viewport", "get_output_log", "blueprint_query",
+      "asset_referencers", "capture_viewport", "capture_pie_screenshot",
+      "get_output_log", "blueprint_query",
     ];
     for (const name of expected) {
       expect(classifyTool(name)).toBe("simple");
@@ -194,8 +195,8 @@ describe("ROUTER_TOOL_SCHEMA", () => {
 });
 
 describe("classification sets", () => {
-  it("SIMPLE_TOOL_NAMES has 12 entries", () => {
-    expect(SIMPLE_TOOL_NAMES.size).toBe(12);
+  it("SIMPLE_TOOL_NAMES has 13 entries", () => {
+    expect(SIMPLE_TOOL_NAMES.size).toBe(13);
   });
 
   it("HIDDEN_TOOL_NAMES has 9 entries", () => {
@@ -245,7 +246,7 @@ describe("categorizeToolForStatus", () => {
   });
 
   it("categorizes utility tools", () => {
-    for (const name of ["capture_viewport", "get_output_log"]) {
+    for (const name of ["capture_viewport", "capture_pie_screenshot", "get_output_log"]) {
       expect(categorizeToolForStatus(name)).toBe("utility");
     }
   });

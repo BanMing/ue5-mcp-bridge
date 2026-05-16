@@ -154,6 +154,7 @@ Once connected, you can interact with Unreal Editor through natural language:
 | Tool | Description |
 |------|-------------|
 | `unreal_capture_viewport` | Capture screenshot of active viewport |
+| `unreal_capture_pie_screenshot` | Capture PIE screenshot WITH UMG/HUD widgets composited (post-Slate backbuffer; the only capture path that includes Slate widgets) |
 
 ### Blueprint Tools
 
