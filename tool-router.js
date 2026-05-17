@@ -47,6 +47,7 @@ export const DOMAIN_TOOL_MAP = {
   enhanced_input: "enhanced_input",
   material: "material",
   asset: "asset",
+  umg: "umg_modify",
 };
 
 // Blueprint operations that route to "blueprint_query" instead of "blueprint_modify"
@@ -75,6 +76,41 @@ const CHARACTER_DATA_OPS = new Set([
   "update_stats_row",
   "remove_stats_row",
   "apply_character_data",
+]);
+
+// UMG operations sub-routed away from the default "umg_modify" tool.
+// FMCPTool_UMGModify (the default for the "umg" domain) only handles the
+// 5 mutation ops below; everything else lives in sibling tools that the
+// router has to dispatch to explicitly. Op names must match the strings
+// dispatched in MCPTool_UMG{Query,Session,Animation}.cpp.
+const UMG_QUERY_OPS = new Set([
+  "get_widget_tree",
+  "query_widget_properties",
+  "get_widget_schema",
+  "get_layout_data",
+  "get_creatable_widget_types",
+]);
+
+const UMG_SESSION_OPS = new Set([
+  "get_target",
+  "set_target",
+  "get_last_edited",
+  "get_recently_edited",
+]);
+
+const UMG_ANIMATION_OPS = new Set([
+  "get_all_animations",
+  "create_animation",
+  "delete_animation",
+  "get_animation_keyframes",
+  "get_widget_animation_data",
+  "set_property_keys",
+  "remove_property_track",
+  "remove_keys",
+  "append_widget_tracks",
+  "set_animation_data",
+  "sample_at_time",
+  "append_time_slice",
 ]);
 
 // Asset operations that route to "asset_manage" instead of "asset".
@@ -110,6 +146,12 @@ export function resolveUnrealTool(domain, operation) {
   if (domain === "asset" && ASSET_MANAGE_OPS.has(operation)) {
     return "asset_manage";
   }
+  if (domain === "umg") {
+    if (UMG_QUERY_OPS.has(operation))     return "umg_query";
+    if (UMG_SESSION_OPS.has(operation))   return "umg_session";
+    if (UMG_ANIMATION_OPS.has(operation)) return "umg_animation";
+    // Default falls through to DOMAIN_TOOL_MAP["umg"] = "umg_modify" below.
+  }
   return DOMAIN_TOOL_MAP[domain] ?? null;
 }
 
@@ -130,6 +172,9 @@ const TOOL_TO_DOMAIN = Object.fromEntries(
 );
 TOOL_TO_DOMAIN["character_data"] = "character"; // sub-route
 TOOL_TO_DOMAIN["asset_manage"] = "asset";       // sub-route for CRUD ops
+TOOL_TO_DOMAIN["umg_query"] = "umg";            // sub-route for read ops
+TOOL_TO_DOMAIN["umg_session"] = "umg";          // sub-route for target/recents
+TOOL_TO_DOMAIN["umg_animation"] = "umg";        // sub-route for animation ops
 
 /**
  * Categorize a tool for the unreal_status health check.
@@ -231,6 +276,23 @@ export const ROUTER_TOOL_SCHEMA = {
     "  open_in_editor, save_all_dirty, duplicate, move, delete",
     "  delete requires confirm_delete:true; blocked by referencers unless force:true.",
     "",
+    'domain:"umg" (key params: widget_blueprint_path; widget_name; widget_type; parent_name)',
+    "  modify ops (FMCPTool_UMGModify, default route): create_widget,",
+    "    set_widget_properties, delete_widget, reparent_widget, save_asset",
+    "  query ops (FMCPTool_UMGQuery): get_widget_tree, query_widget_properties,",
+    "    get_widget_schema, get_layout_data, get_creatable_widget_types",
+    "  session ops (FMCPTool_UMGSession): set_target, get_target,",
+    "    get_last_edited, get_recently_edited",
+    "  animation ops (FMCPTool_UMGAnimation): get_all_animations, create_animation,",
+    "    delete_animation, get_animation_keyframes, get_widget_animation_data,",
+    "    set_property_keys, remove_property_track, remove_keys,",
+    "    append_widget_tracks, set_animation_data, sample_at_time, append_time_slice",
+    "  set_target lets later calls omit widget_blueprint_path (see umg_session.cpp).",
+    "  set_widget_properties: pass CanvasPanelSlot layout as Slot.LayoutData.{Anchors,Offsets,Alignment};",
+    "    Slot.Anchors alias is promoted verbatim, but Offsets/Alignment must live under LayoutData",
+    "    (or use Array shorthand Slot.Position=[x,y], Slot.Size=[w,h], Slot.Alignment=[x,y]).",
+    "  Non-ASCII text (CJK) is UTF-8 safe through this MCP path.",
+    "",
     "Pass all domain-specific params inside the params object.",
   ].join("\n"),
   inputSchema: {
@@ -239,7 +301,7 @@ export const ROUTER_TOOL_SCHEMA = {
     properties: {
       domain: {
         type: "string",
-        description: "blueprint | anim | character | enhanced_input | material | asset",
+        description: "blueprint | anim | character | enhanced_input | material | asset | umg",
       },
       operation: {
         type: "string",
