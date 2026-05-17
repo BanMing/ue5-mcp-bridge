@@ -3,10 +3,16 @@
  *
  * Classifies tools into three layers:
  * - Simple: pass through from Unreal unchanged (13 tools)
- * - Hidden: callable but never listed (9 tools)
- * - Mega: collapsed into unreal_ue router (7 tools)
+ * - Hidden: callable but never listed (9 tools — task queue + script eval +
+ *   run_console_command)
+ * - Mega: collapsed into unreal_ue router (17 domains, 25 underlying tools)
  *
- * Token budget: 28 tools / ~30K tokens -> 16 tools / ~12K tokens
+ * Token budget: 47 raw Unreal tools / ~50K tokens -> 14 LLM-facing tools
+ * (13 simple + 1 router) / ~14K tokens.
+ *
+ * All non-Simple, non-Hidden C++ tools registered in MCPToolRegistry.cpp
+ * MUST appear in DOMAIN_TOOL_MAP (or in a sub-route) or they become orphaned
+ * — invisible to list_tools AND unreachable through unreal_ue.
  */
 
 // Simple tools: appear in list_tools with full schema
@@ -39,15 +45,41 @@ export const HIDDEN_TOOL_NAMES = new Set([
   "run_console_command",
 ]);
 
-// Domain -> underlying Unreal tool name
+// Domain -> underlying Unreal tool name (default route; sub-routes below).
+// Domains marked (single) have no sub-routing — the op set lives entirely
+// inside the target tool's own dispatch.
 export const DOMAIN_TOOL_MAP = {
-  blueprint: "blueprint_modify",
-  anim: "anim_blueprint_modify",
-  character: "character",
-  enhanced_input: "enhanced_input",
-  material: "material",
-  asset: "asset",
-  umg: "umg_modify",
+  blueprint: "blueprint_modify",         // + blueprint_query sub-route
+  anim: "anim_blueprint_modify",         // single
+  character: "character",                // + character_data sub-route
+  enhanced_input: "enhanced_input",      // single
+  material: "material",                  // single
+  asset: "asset",                        // + asset_manage sub-route
+  umg: "umg_modify",                     // + umg_query/session/animation sub-routes
+
+  // PR-A: PIE control + build/live-coding
+  pie: "pie_session",                    // + pie_input sub-route
+  build: "trigger_live_coding",          // + build_and_relaunch sub-route
+
+  // PR-E: StateTree
+  statetree: "statetree_modify",         // + statetree_query sub-route
+
+  // PR-G: Niagara + GAS
+  niagara: "niagara_modify",             // single
+  gas: "gas_modify",                     // single
+
+  // PR-F: log reader + web research (op-dispatched, exposed as single-tool domains)
+  logs: "logs_read",                     // single
+  web: "web_research",                   // single
+
+  // Story-2: Material Graph / HLSL (own domains because set_target / compile op
+  // names collide with each other AND with the base material domain — keeping
+  // them as distinct domains avoids ambiguous routing).
+  material_graph: "material_graph",      // single
+  material_hlsl: "material_hlsl",        // single
+
+  // DataTable (generic, any UStruct row type)
+  datatable: "generic_datatable",        // single
 };
 
 // Blueprint operations that route to "blueprint_query" instead of "blueprint_modify"
@@ -113,6 +145,38 @@ const UMG_ANIMATION_OPS = new Set([
   "append_time_slice",
 ]);
 
+// PIE input ops (sub-route under "pie"). Default route for "pie" domain is
+// pie_session (start/stop/pause/resume/get_state/wait_for). These op names
+// must match the Action strings dispatched in MCPTool_PIEInput.cpp.
+const PIE_INPUT_OPS = new Set([
+  "key",
+  "action",
+  "axis",
+  "move_to",
+  "look_at",
+  "inject_action",
+]);
+
+// Build/relaunch ops (sub-route under "build"). Default route for "build"
+// domain is trigger_live_coding (the most common op). build_and_relaunch is
+// destructive (kills the editor) so it lives behind an explicit op name.
+const BUILD_RELAUNCH_OPS = new Set([
+  "relaunch",
+  "build_and_relaunch",
+  "build_relaunch",
+]);
+
+// StateTree query op (sub-route under "statetree"). Default route is
+// statetree_modify (add_state/add_task/add_transition/remove_state per
+// MCPTool_StateTreeModify.cpp). Query is single-shot — any of these synonyms
+// triggers the read tool.
+const STATETREE_QUERY_OPS = new Set([
+  "query",
+  "inspect",
+  "get_info",
+  "read",
+]);
+
 // Asset operations that route to "asset_manage" instead of "asset".
 // FMCPTool_Asset (slim tool) only exposes set_asset_property/save_asset/
 // get_asset_info/list_assets. Everything else — CRUD, search, delete with
@@ -152,6 +216,15 @@ export function resolveUnrealTool(domain, operation) {
     if (UMG_ANIMATION_OPS.has(operation)) return "umg_animation";
     // Default falls through to DOMAIN_TOOL_MAP["umg"] = "umg_modify" below.
   }
+  if (domain === "pie" && PIE_INPUT_OPS.has(operation)) {
+    return "pie_input";
+  }
+  if (domain === "build" && BUILD_RELAUNCH_OPS.has(operation)) {
+    return "build_and_relaunch";
+  }
+  if (domain === "statetree" && STATETREE_QUERY_OPS.has(operation)) {
+    return "statetree_query";
+  }
   return DOMAIN_TOOL_MAP[domain] ?? null;
 }
 
@@ -170,11 +243,15 @@ export function classifyTool(toolName) {
 const TOOL_TO_DOMAIN = Object.fromEntries(
   Object.entries(DOMAIN_TOOL_MAP).map(([domain, tool]) => [tool, domain])
 );
-TOOL_TO_DOMAIN["character_data"] = "character"; // sub-route
-TOOL_TO_DOMAIN["asset_manage"] = "asset";       // sub-route for CRUD ops
-TOOL_TO_DOMAIN["umg_query"] = "umg";            // sub-route for read ops
-TOOL_TO_DOMAIN["umg_session"] = "umg";          // sub-route for target/recents
-TOOL_TO_DOMAIN["umg_animation"] = "umg";        // sub-route for animation ops
+TOOL_TO_DOMAIN["character_data"] = "character";   // sub-route
+TOOL_TO_DOMAIN["asset_manage"] = "asset";         // sub-route for CRUD ops
+TOOL_TO_DOMAIN["umg_query"] = "umg";              // sub-route for read ops
+TOOL_TO_DOMAIN["umg_session"] = "umg";            // sub-route for target/recents
+TOOL_TO_DOMAIN["umg_animation"] = "umg";          // sub-route for animation ops
+TOOL_TO_DOMAIN["pie_input"] = "pie";              // sub-route for input injection
+TOOL_TO_DOMAIN["build_and_relaunch"] = "build";   // sub-route for destructive rebuild
+TOOL_TO_DOMAIN["statetree_query"] = "statetree";  // sub-route for read ops
+TOOL_TO_DOMAIN["blueprint_query"] = "blueprint";  // sub-route already exposed as SIMPLE
 
 /**
  * Categorize a tool for the unreal_status health check.
@@ -276,6 +353,79 @@ export const ROUTER_TOOL_SCHEMA = {
     "  open_in_editor, save_all_dirty, duplicate, move, delete",
     "  delete requires confirm_delete:true; blocked by referencers unless force:true.",
     "",
+    'domain:"pie" (PR-A; controls Play-In-Editor session + input injection)',
+    "  session ops (FMCPTool_PIESession, default route): start, stop, pause,",
+    "    resume, get_state, wait_for",
+    "  input ops (FMCPTool_PIEInput): key, action, axis, move_to, look_at,",
+    "    inject_action",
+    "  start params: mode (selected/PIE/Standalone), num_clients. wait_for params:",
+    "    target_state (Playing/Paused/Stopped), timeout_seconds (default 10).",
+    "  key params: key (e.g. 'W'), event (Pressed/Released/Repeat). move_to params:",
+    "    target/location ({x,y,z}). All input ops act on the PIE pawn.",
+    "",
+    'domain:"build" (PR-A; C++ build / Live Coding control)',
+    "  default op: trigger_live_coding (any op name not in BUILD_RELAUNCH_OPS).",
+    "    Triggers a Live Coding compile; editor stays running. Win64 editor only.",
+    "  relaunch ops (FMCPTool_BuildAndRelaunch): relaunch, build_and_relaunch,",
+    "    build_relaunch — DESTRUCTIVE: spawns detached cmd that closes editor",
+    "    → runs Build.bat → relaunches. Use only when reflection-changing C++",
+    "    changes (USTRUCT layout / UCLASS hierarchy / new UPROPERTY) require",
+    "    a full module reload that Live Coding cannot do safely.",
+    "",
+    'domain:"statetree" (PR-E; UStateTree asset read+modify)',
+    "  default ops (FMCPTool_StateTreeModify): add_state, add_task,",
+    "    add_transition, remove_state. All require asset_path.",
+    "  query ops (FMCPTool_StateTreeQuery, sub-route): query, inspect, get_info,",
+    "    read — single-shot read of states/transitions/tasks/evaluators/parameters.",
+    "    Optional params: include (all|states|transitions|tasks|evaluators|",
+    "    parameters), detailed (bool, default true).",
+    "  Read-before-write convention applies — call query first, confirm state",
+    "    names, then modify.",
+    "",
+    'domain:"niagara" (PR-G; Niagara system control)',
+    "  ops (FMCPTool_NiagaraModify): list_systems, get_info, spawn_at_location,",
+    "    set_parameter. spawn_at_location needs system_path + location {x,y,z}.",
+    "    set_parameter needs system_path + parameter_name + value.",
+    "",
+    'domain:"gas" (PR-G; Gameplay Ability System asset authoring)',
+    "  ops (FMCPTool_GASModify): list_abilities, list_effects, list_attribute_sets,",
+    "    create_ability_blueprint, create_effect_blueprint,",
+    "    create_attribute_set_blueprint, set_ability_tags, set_effect_modifier.",
+    "  NOTE: For Paoge, follow gas-conventions.md naming (UPaogeAbility_<Name>,",
+    "    UCLASS(Abstract) for data-style classes, BP children named GA_/GE_/GC_).",
+    "",
+    'domain:"logs" (PR-F; file-based UE log reader)',
+    "  ops (FMCPTool_LogsRead): list, info, read, tail, head, filter, errors,",
+    "    warnings, since. Reads .log files from <ProjectDir>/Saved/Logs/, not the",
+    "    in-memory output ring (use simple-tool get_output_log for that).",
+    "  filter takes pattern (substring). since takes timestamp (UE log format).",
+    "  Useful for inspecting logs from prior PIE / cooked-build sessions.",
+    "",
+    'domain:"web" (PR-F; UE-process-internal web research)',
+    "  ops (FMCPTool_WebResearch): search (DuckDuckGo), fetch_page (Jina Reader",
+    "    markdown), geocode + reverse_geocode (Nominatim). Runs INSIDE the UE",
+    "    process — no external HTTP client needed. Useful for documentation",
+    "    lookups during long-running editor sessions.",
+    "",
+    'domain:"material_graph" (Story-2; Material expression graph authoring)',
+    "  ops (FMCPTool_MaterialGraph): set_target, define_variable, add_node,",
+    "    delete_node, connect_nodes, connect_pins, set_node_properties,",
+    "    get_node_info, set_output_node, compile_asset.",
+    "  set_target anchors a 'current material' so subsequent ops can omit",
+    "    material_path. NOTE: this is a SEPARATE target from material_hlsl's.",
+    "",
+    'domain:"material_hlsl" (Story-2; Custom HLSL node authoring)',
+    "  ops (FMCPTool_MaterialHLSL): set_target, get, set, compile.",
+    "  Writes/reads the HLSL source string on a UMaterialExpressionCustom node.",
+    "  set_target anchors the parent Material+Custom node; get/set act on its",
+    "  Code property; compile rebuilds the material.",
+    "",
+    'domain:"datatable" (Generic; any UStruct row type)',
+    "  ops (FMCPTool_GenericDataTable): create_table, query_table, add_row,",
+    "    update_row, remove_row.",
+    "  create_table needs table_path + row_struct_path (the UScriptStruct).",
+    "  query_table returns rows as JSON objects keyed by RowName.",
+    "",
     'domain:"umg" (key params: widget_blueprint_path; widget_name; widget_type; parent_name)',
     "  modify ops (FMCPTool_UMGModify, default route): create_widget,",
     "    set_widget_properties, delete_widget, reparent_widget, save_asset",
@@ -301,7 +451,7 @@ export const ROUTER_TOOL_SCHEMA = {
     properties: {
       domain: {
         type: "string",
-        description: "blueprint | anim | character | enhanced_input | material | asset | umg",
+        description: "blueprint | anim | character | enhanced_input | material | asset | umg | pie | build | statetree | niagara | gas | logs | web | material_graph | material_hlsl | datatable",
       },
       operation: {
         type: "string",

@@ -109,6 +109,55 @@ describe("resolveUnrealTool", () => {
     expect(resolveUnrealTool("character", "add_stats_row")).toBe("character_data");
   });
 
+  it("routes umg domain across modify/query/session/animation sub-tools", () => {
+    expect(resolveUnrealTool("umg", "set_widget_properties")).toBe("umg_modify");
+    expect(resolveUnrealTool("umg", "get_widget_tree")).toBe("umg_query");
+    expect(resolveUnrealTool("umg", "set_target")).toBe("umg_session");
+    expect(resolveUnrealTool("umg", "create_animation")).toBe("umg_animation");
+  });
+
+  it("routes pie domain across session and input", () => {
+    // Session ops (default route)
+    for (const op of ["start", "stop", "pause", "resume", "get_state", "wait_for"]) {
+      expect(resolveUnrealTool("pie", op)).toBe("pie_session");
+    }
+    // Input ops (sub-route)
+    for (const op of ["key", "action", "axis", "move_to", "look_at", "inject_action"]) {
+      expect(resolveUnrealTool("pie", op)).toBe("pie_input");
+    }
+  });
+
+  it("routes build domain across live coding and full relaunch", () => {
+    // Default route (live coding compile)
+    expect(resolveUnrealTool("build", "trigger")).toBe("trigger_live_coding");
+    expect(resolveUnrealTool("build", "live_coding")).toBe("trigger_live_coding");
+    // Destructive sub-route
+    for (const op of ["relaunch", "build_and_relaunch", "build_relaunch"]) {
+      expect(resolveUnrealTool("build", op)).toBe("build_and_relaunch");
+    }
+  });
+
+  it("routes statetree domain across modify and query", () => {
+    // Modify ops (default route)
+    for (const op of ["add_state", "add_task", "add_transition", "remove_state"]) {
+      expect(resolveUnrealTool("statetree", op)).toBe("statetree_modify");
+    }
+    // Query ops (sub-route — synonyms all collapse to the same read tool)
+    for (const op of ["query", "inspect", "get_info", "read"]) {
+      expect(resolveUnrealTool("statetree", op)).toBe("statetree_query");
+    }
+  });
+
+  it("routes single-tool domains directly (niagara/gas/logs/web/datatable/material_graph/material_hlsl)", () => {
+    expect(resolveUnrealTool("niagara", "list_systems")).toBe("niagara_modify");
+    expect(resolveUnrealTool("gas", "list_abilities")).toBe("gas_modify");
+    expect(resolveUnrealTool("logs", "tail")).toBe("logs_read");
+    expect(resolveUnrealTool("web", "search")).toBe("web_research");
+    expect(resolveUnrealTool("datatable", "add_row")).toBe("generic_datatable");
+    expect(resolveUnrealTool("material_graph", "add_node")).toBe("material_graph");
+    expect(resolveUnrealTool("material_hlsl", "set")).toBe("material_hlsl");
+  });
+
   it("returns null for unknown domain", () => {
     expect(resolveUnrealTool("unknown", "op")).toBeNull();
   });
@@ -134,14 +183,27 @@ describe("ROUTER_TOOL_SCHEMA", () => {
     expect(ROUTER_TOOL_SCHEMA.inputSchema.required).not.toContain("params");
   });
 
-  it("description mentions all six domains", () => {
+  it("description mentions all 17 domains", () => {
     const desc = ROUTER_TOOL_SCHEMA.description;
+    // Original 7
     expect(desc).toContain('"blueprint"');
     expect(desc).toContain('"anim"');
     expect(desc).toContain('"character"');
     expect(desc).toContain('"enhanced_input"');
     expect(desc).toContain('"material"');
     expect(desc).toContain('"asset"');
+    expect(desc).toContain('"umg"');
+    // 10 added in the gap-closure patch
+    expect(desc).toContain('"pie"');
+    expect(desc).toContain('"build"');
+    expect(desc).toContain('"statetree"');
+    expect(desc).toContain('"niagara"');
+    expect(desc).toContain('"gas"');
+    expect(desc).toContain('"logs"');
+    expect(desc).toContain('"web"');
+    expect(desc).toContain('"material_graph"');
+    expect(desc).toContain('"material_hlsl"');
+    expect(desc).toContain('"datatable"');
   });
 
   it("is not read-only (mega-tools mutate state)", () => {
@@ -203,14 +265,28 @@ describe("classification sets", () => {
     expect(HIDDEN_TOOL_NAMES.size).toBe(9);
   });
 
-  it("DOMAIN_TOOL_MAP has 6 domains with correct values", () => {
-    expect(Object.keys(DOMAIN_TOOL_MAP)).toHaveLength(6);
+  it("DOMAIN_TOOL_MAP has 17 domains with correct default routes", () => {
+    // 7 original (blueprint/anim/character/enhanced_input/material/asset/umg)
+    // + 10 added in the gap-closure patch (pie/build/statetree/niagara/gas/
+    //   logs/web/material_graph/material_hlsl/datatable).
+    expect(Object.keys(DOMAIN_TOOL_MAP)).toHaveLength(17);
     expect(DOMAIN_TOOL_MAP.blueprint).toBe("blueprint_modify");
     expect(DOMAIN_TOOL_MAP.anim).toBe("anim_blueprint_modify");
     expect(DOMAIN_TOOL_MAP.character).toBe("character");
     expect(DOMAIN_TOOL_MAP.enhanced_input).toBe("enhanced_input");
     expect(DOMAIN_TOOL_MAP.material).toBe("material");
     expect(DOMAIN_TOOL_MAP.asset).toBe("asset");
+    expect(DOMAIN_TOOL_MAP.umg).toBe("umg_modify");
+    expect(DOMAIN_TOOL_MAP.pie).toBe("pie_session");
+    expect(DOMAIN_TOOL_MAP.build).toBe("trigger_live_coding");
+    expect(DOMAIN_TOOL_MAP.statetree).toBe("statetree_modify");
+    expect(DOMAIN_TOOL_MAP.niagara).toBe("niagara_modify");
+    expect(DOMAIN_TOOL_MAP.gas).toBe("gas_modify");
+    expect(DOMAIN_TOOL_MAP.logs).toBe("logs_read");
+    expect(DOMAIN_TOOL_MAP.web).toBe("web_research");
+    expect(DOMAIN_TOOL_MAP.material_graph).toBe("material_graph");
+    expect(DOMAIN_TOOL_MAP.material_hlsl).toBe("material_hlsl");
+    expect(DOMAIN_TOOL_MAP.datatable).toBe("generic_datatable");
   });
 
   it("BLUEPRINT_QUERY_OPS has 9 entries", () => {
