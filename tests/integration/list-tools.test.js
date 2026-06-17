@@ -290,9 +290,17 @@ describe("ListTools — router filtering", () => {
     expect(router.inputSchema.required).toContain("operation");
   });
 
-  it("includes simple tools (spawn_actor)", async () => {
+  it("includes simple tools (spawn_actor, execute_script)", async () => {
     const result = await simulateListTools();
     expect(result.tools.find(t => t.name === "unreal_spawn_actor")).toBeDefined();
+    // execute_script was promoted HIDDEN -> SIMPLE so it is now listed natively.
+    expect(result.tools.find(t => t.name === "unreal_execute_script")).toBeDefined();
+  });
+
+  it("includes task_status/task_result (promoted HIDDEN -> SIMPLE)", async () => {
+    const result = await simulateListTools();
+    expect(result.tools.find(t => t.name === "unreal_task_status")).toBeDefined();
+    expect(result.tools.find(t => t.name === "unreal_task_result")).toBeDefined();
   });
 
   it("excludes mega tools (blueprint_modify, get_actors)", async () => {
@@ -304,6 +312,6 @@ describe("ListTools — router filtering", () => {
   it("excludes hidden tools (task_submit)", async () => {
     const result = await simulateListTools();
     expect(result.tools.find(t => t.name === "unreal_task_submit")).toBeUndefined();
-    expect(result.tools.find(t => t.name === "unreal_execute_script")).toBeUndefined();
+    expect(result.tools.find(t => t.name === "unreal_cleanup_scripts")).toBeUndefined();
   });
 });

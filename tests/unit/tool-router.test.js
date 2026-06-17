@@ -11,22 +11,23 @@ import {
 } from "../../tool-router.js";
 
 describe("classifyTool", () => {
-  it("classifies all 13 simple tools", () => {
+  it("classifies all 16 simple tools", () => {
     const expected = [
       "spawn_actor", "move_actor", "delete_actors", "set_property",
       "get_level_actors", "open_level", "asset_search", "asset_dependencies",
       "asset_referencers", "capture_viewport", "capture_pie_screenshot",
-      "get_output_log", "blueprint_query",
+      "get_output_log", "blueprint_query", "execute_script",
+      "task_status", "task_result",
     ];
     for (const name of expected) {
       expect(classifyTool(name)).toBe("simple");
     }
   });
 
-  it("classifies all 9 hidden tools", () => {
+  it("classifies all 6 hidden tools", () => {
     const expected = [
-      "task_submit", "task_status", "task_result", "task_list", "task_cancel",
-      "execute_script", "cleanup_scripts", "get_script_history", "run_console_command",
+      "task_submit", "task_list", "task_cancel",
+      "cleanup_scripts", "get_script_history", "run_console_command",
     ];
     for (const name of expected) {
       expect(classifyTool(name)).toBe("hidden");
@@ -257,12 +258,12 @@ describe("ROUTER_TOOL_SCHEMA", () => {
 });
 
 describe("classification sets", () => {
-  it("SIMPLE_TOOL_NAMES has 13 entries", () => {
-    expect(SIMPLE_TOOL_NAMES.size).toBe(13);
+  it("SIMPLE_TOOL_NAMES has 16 entries", () => {
+    expect(SIMPLE_TOOL_NAMES.size).toBe(16);
   });
 
-  it("HIDDEN_TOOL_NAMES has 9 entries", () => {
-    expect(HIDDEN_TOOL_NAMES.size).toBe(9);
+  it("HIDDEN_TOOL_NAMES has 6 entries", () => {
+    expect(HIDDEN_TOOL_NAMES.size).toBe(6);
   });
 
   it("DOMAIN_TOOL_MAP has 17 domains with correct default routes", () => {

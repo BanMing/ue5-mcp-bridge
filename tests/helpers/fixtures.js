@@ -87,6 +87,33 @@ export const UNREAL_TOOLS_RESPONSE = {
         openWorldHint: false,
       },
     },
+    // --- Simple task-queue tools (promoted HIDDEN -> SIMPLE) ---
+    {
+      name: "task_status",
+      description: "Poll the status of a submitted async task",
+      parameters: [
+        { name: "task_id", type: "string", description: "Task identifier", required: true },
+      ],
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    {
+      name: "task_result",
+      description: "Retrieve the result of a completed async task",
+      parameters: [
+        { name: "task_id", type: "string", description: "Task identifier", required: true },
+      ],
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     // --- Another hidden tool ---
     {
       name: "execute_script",

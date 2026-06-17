@@ -2,13 +2,18 @@
  * Tool Router for UE5 MCP Bridge
  *
  * Classifies tools into three layers:
- * - Simple: pass through from Unreal unchanged (13 tools)
- * - Hidden: callable but never listed (9 tools — task queue + script eval +
- *   run_console_command)
+ * - Simple: pass through from Unreal unchanged (16 tools)
+ * - Hidden: callable but never listed (6 tools — task queue submit/list/cancel
+ *   + script history/cleanup + run_console_command)
  * - Mega: collapsed into unreal_ue router (17 domains, 25 underlying tools)
  *
- * Token budget: 47 raw Unreal tools / ~50K tokens -> 14 LLM-facing tools
- * (13 simple + 1 router) / ~14K tokens.
+ * Token budget: 47 raw Unreal tools / ~50K tokens -> 17 LLM-facing tools
+ * (16 simple + 1 router) / ~15K tokens.
+ *
+ * NOTE: execute_script is intentionally SIMPLE (listed natively as
+ * unreal_execute_script). It runs arbitrary in-editor Python and is the
+ * primary path for DataAsset creation / CDO writes that no structured tool
+ * covers; surfacing it natively removes the localhost:8765 HTTP fallback.
  *
  * All non-Simple, non-Hidden C++ tools registered in MCPToolRegistry.cpp
  * MUST appear in DOMAIN_TOOL_MAP (or in a sub-route) or they become orphaned
@@ -30,16 +35,16 @@ export const SIMPLE_TOOL_NAMES = new Set([
   "capture_pie_screenshot",
   "get_output_log",
   "blueprint_query",
+  "execute_script",
+  "task_status",
+  "task_result",
 ]);
 
 // Hidden tools: callable but never listed
 export const HIDDEN_TOOL_NAMES = new Set([
   "task_submit",
-  "task_status",
-  "task_result",
   "task_list",
   "task_cancel",
-  "execute_script",
   "cleanup_scripts",
   "get_script_history",
   "run_console_command",
@@ -264,6 +269,14 @@ export function categorizeToolForStatus(toolName) {
   if (cls === "mega") return TOOL_TO_DOMAIN[toolName] || "utility";
   if (cls === "hidden") return toolName.startsWith("task_") ? "task_queue" : "scripting";
   // Simple tools
+  // execute_script is SIMPLE (listed natively) but semantically a scripting
+  // tool — keep it grouped with the hidden script-history/cleanup tools in
+  // the status health check rather than the catch-all "utility" bucket.
+  if (toolName === "execute_script") return "scripting";
+  // task_status / task_result are SIMPLE (listed natively) but belong to the
+  // task-queue family in the status health check — group them with the hidden
+  // task_submit/list/cancel tools rather than the catch-all "utility" bucket.
+  if (toolName.startsWith("task_")) return "task_queue";
   if (toolName.startsWith("asset_")) return "asset";
   if (toolName === "blueprint_query") return "blueprint";
   if (toolName === "open_level") return "level";
