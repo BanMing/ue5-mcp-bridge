@@ -27,7 +27,13 @@ import {
   listCategories,
   getCategoryInfo,
   loadContextForCategory,
+  listSections,
+  getSectionByHeading,
+  getSectionsForQuery,
 } from "./context-loader.js";
+
+// Pure routing logic for unreal_get_ue_context (extracted for testability)
+import { resolveUeContextRequest, resolveProjectContextRequest } from "./context-handler.js";
 
 // Extracted library functions
 import {
@@ -143,22 +149,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   // 3. Router tool (static schema for all mega-tools)
   mcpTools.push(ROUTER_TOOL_SCHEMA);
 
-  // 4. Context tool last
+  // 4. Context tool (section-aware)
   mcpTools.push({
     name: "unreal_get_ue_context",
-    description: `Get UE 5.7 API context. Categories: ${listCategories().join(", ")}`,
+    description: [
+      "Get UE 5.7 API documentation. By default returns only the most relevant SECTIONS for your query (saves tokens).",
+      `Categories: ${listCategories().join(", ")}.`,
+      'Modes: "sections" (default — targeted by query), "outline" (TOC of headings), "full" (entire file, use sparingly).',
+    ].join(" "),
     inputSchema: {
       type: "object",
       properties: {
-        category: {
-          type: "string",
-          description: `Specific category to load: ${listCategories().join(", ")}`,
-        },
         query: {
           type: "string",
-          description: "Search query to find relevant context (e.g., 'state machine transitions', 'async loading')",
+          description: "Natural-language query — returns up to max_sections most relevant sections across matching categories.",
+        },
+        category: {
+          type: "string",
+          description: `Restrict search to one category: ${listCategories().join(", ")}. With mode="full" returns the entire file.`,
+        },
+        section: {
+          type: "string",
+          description: 'Exact section heading to retrieve (e.g., "Core Classes"). Use after an outline call.',
+        },
+        mode: {
+          type: "string",
+          enum: ["sections", "outline", "full"],
+          description: 'sections=targeted (default), outline=list headings only, full=entire file.',
+        },
+        max_sections: {
+          type: "number",
+          description: "Max sections to return in sections mode (default 3, max 8).",
         },
       },
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  });
+
+  // 5. Project context tool (on-demand, replaces always-on system prompt dump)
+  mcpTools.push({
+    name: "unreal_get_project_context",
+    description: "Get full project context: C++ class list, source structure, level actors, asset counts. Call when you need project-specific details.",
+    inputSchema: {
+      type: "object",
+      properties: {},
     },
     annotations: {
       readOnlyHint: true,
@@ -176,73 +215,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  // Handle UE context request
+  // Handle UE context request (section-aware, token-efficient)
   if (name === "unreal_get_ue_context") {
-    const { category, query } = args || {};
+    const response = resolveUeContextRequest(args, {
+      listCategories,
+      listSections,
+      getSectionByHeading,
+      loadContextForCategory,
+      getSectionsForQuery,
+      getCategoryInfo,
+    });
+    log.info("UE context resolved", { mode: (args || {}).mode, category: (args || {}).category, hasQuery: !!(args || {}).query });
+    return response;
+  }
 
-    let result = null;
-    let matchedCategories = [];
-
-    if (category) {
-      const content = loadContextForCategory(category);
-      if (content) {
-        result = content;
-        matchedCategories = [category];
-      } else {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Unknown category: ${category}. Available categories: ${listCategories().join(", ")}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }
-    else if (query) {
-      const queryResult = getContextForQuery(query);
-      if (queryResult) {
-        result = queryResult.content;
-        matchedCategories = queryResult.categories;
-      } else {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `No context found for query: "${query}". Try categories: ${listCategories().join(", ")}`,
-            },
-          ],
-          isError: false,
-        };
-      }
-    }
-    else {
-      const categoryList = listCategories().map((cat) => {
-        const info = getCategoryInfo(cat);
-        return `- **${cat}**: Keywords: ${info.keywords.slice(0, 5).join(", ")}...`;
-      });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `# Available UE 5.7 Context Categories\n\n${categoryList.join("\n")}\n\nUse \`category\` param for specific context or \`query\` to search by keywords.`,
-          },
-        ],
-      };
-    }
-
-    log.info("UE context loaded", { categories: matchedCategories });
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: `# UE 5.7 Context: ${matchedCategories.join(", ")}\n\n${result}`,
-        },
-      ],
-    };
+  // Handle project context request (on-demand, avoids bloating system prompt)
+  if (name === "unreal_get_project_context") {
+    const response = await resolveProjectContextRequest({
+      checkConnection: checkUnrealConnection,
+      fetchImpl: fetch,
+      url: CONFIG.unrealMcpUrl,
+      timeoutMs: CONFIG.requestTimeoutMs,
+    });
+    log.info("Project context resolved", { isError: !!response.isError });
+    return response;
   }
 
   // Handle status check (lightweight — uses cached tools, no context probe)
@@ -268,7 +264,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         context_categories: contextCategories.length,
         tool_summary: categories,
         total_tools: unrealTools.length,
-        exposed_tools: simpleCount + 3, // simple tools + status + router + context
+        exposed_tools: simpleCount + 4, // simple tools + status + router + context + project_context
         message: "Unreal Editor connected. All tools operational.",
       };
 
