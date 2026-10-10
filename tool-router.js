@@ -145,6 +145,17 @@ const UMG_SESSION_OPS = new Set([
   "get_recently_edited",
 ]);
 
+// UMG snapshot op (sub-route under "umg"). FMCPTool_UMGSnapshot is registered
+// on the C++ side (MCPToolRegistry.cpp) and exposes a single export-only
+// operation, so the tool itself takes no "operation" param — the router maps
+// these synonyms onto it. Kept separate from UMG_QUERY_OPS because the snapshot
+// tool is a distinct Unreal tool, not another op inside FMCPTool_UMGQuery.
+const UMG_SNAPSHOT_OPS = new Set([
+  "snapshot",
+  "umg_snapshot",
+  "export_snapshot",
+]);
+
 const UMG_ANIMATION_OPS = new Set([
   "get_all_animations",
   "create_animation",
@@ -227,6 +238,7 @@ export function resolveUnrealTool(domain, operation) {
   }
   if (domain === "umg") {
     if (UMG_QUERY_OPS.has(operation))     return "umg_query";
+    if (UMG_SNAPSHOT_OPS.has(operation))  return "umg_snapshot";
     if (UMG_SESSION_OPS.has(operation))   return "umg_session";
     if (UMG_ANIMATION_OPS.has(operation)) return "umg_animation";
     // Default falls through to DOMAIN_TOOL_MAP["umg"] = "umg_modify" below.
@@ -261,6 +273,7 @@ const TOOL_TO_DOMAIN = Object.fromEntries(
 TOOL_TO_DOMAIN["character_data"] = "character";   // sub-route
 TOOL_TO_DOMAIN["asset_manage"] = "asset";         // sub-route for CRUD ops
 TOOL_TO_DOMAIN["umg_query"] = "umg";              // sub-route for read ops
+TOOL_TO_DOMAIN["umg_snapshot"] = "umg";           // sub-route for export-only snapshot
 TOOL_TO_DOMAIN["umg_session"] = "umg";            // sub-route for target/recents
 TOOL_TO_DOMAIN["umg_animation"] = "umg";          // sub-route for animation ops
 TOOL_TO_DOMAIN["pie_input"] = "pie";              // sub-route for input injection
@@ -454,6 +467,12 @@ export const ROUTER_TOOL_SCHEMA = {
     "    set_widget_properties, delete_widget, reparent_widget, save_asset",
     "  query ops (FMCPTool_UMGQuery): get_widget_tree, query_widget_properties,",
     "    get_widget_schema, get_layout_data, get_creatable_widget_types",
+    "  snapshot op (FMCPTool_UMGSnapshot): snapshot — export-only; returns the",
+    "    widget tree plus, per widget, ONLY properties differing from the CDO,",
+    "    with layout under a nested \"slot\" object. Optional widget_name limits",
+    "    it to one subtree; optional write_to_file also writes the JSON to an",
+    "    absolute path (use for git-tracked UI review artifacts, so a binary",
+    "    .uasset UI change becomes a text diff). Never modifies the asset.",
     "  session ops (FMCPTool_UMGSession): set_target, get_target,",
     "    get_last_edited, get_recently_edited",
     "  animation ops (FMCPTool_UMGAnimation): get_all_animations, create_animation,",

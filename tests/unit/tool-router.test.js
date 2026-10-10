@@ -117,6 +117,16 @@ describe("resolveUnrealTool", () => {
     expect(resolveUnrealTool("umg", "create_animation")).toBe("umg_animation");
   });
 
+  // Regression: FMCPTool_UMGSnapshot was registered on the C++ side and listed
+  // by /mcp/tools, but the router had no entry for it, so every snapshot call
+  // fell through to the "umg" default (umg_modify) and failed with
+  // "Unknown operation". Callers had to bypass the bridge with raw HTTP.
+  it("routes umg snapshot synonyms to the 'umg_snapshot' tool", () => {
+    for (const op of ["snapshot", "umg_snapshot", "export_snapshot"]) {
+      expect(resolveUnrealTool("umg", op)).toBe("umg_snapshot");
+    }
+  });
+
   it("routes pie domain across session and input", () => {
     // Session ops (default route)
     for (const op of ["start", "stop", "pause", "resume", "get_state", "wait_for"]) {
